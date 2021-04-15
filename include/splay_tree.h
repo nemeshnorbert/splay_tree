@@ -529,7 +529,7 @@ struct splay_tree {
   }
 
   splay_tree<Key, Value, KeyExtractor, KeyComparator>& operator = (
-     const splay_tree<Key, Value, KeyExtractor, KeyComparator>&& other) {
+     splay_tree<Key, Value, KeyExtractor, KeyComparator>&& other) {
     this->swap(other);
     return *this;
   }

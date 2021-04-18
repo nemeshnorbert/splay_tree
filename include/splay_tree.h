@@ -8,12 +8,13 @@ namespace splay {
 // 1. any key in the left subtree is strictly less than value
 // 2. any key in the right subtree is strictly greater than value
 // 3. no duplicate keys
+
 template <typename Value>
 struct splay_tree_node {
 
-  splay_tree_node(const Value& value)
+  splay_tree_node(const Value& value) noexcept
     : value{value}
-    , node_count{1}
+    , size{1}
     , parent{nullptr}
     , left{nullptr}
     , right{nullptr}
@@ -24,25 +25,25 @@ struct splay_tree_node {
     node->parent = nullptr;
     node->left = nullptr;
     node->right = nullptr;
-    node->node_count = 0;
+    node->size = uint64_t{0};
   }
 
-  bool is_root() const {
+  bool is_root() const noexcept {
     const auto* node = this;
     return node->parent == nullptr;
   }
 
-  bool is_left_child() const {
+  bool is_left_child() const noexcept {
     const auto* node = this;
     return !node->is_root() && node->parent->left == node;
   }
 
-  bool is_right_child() const {
+  bool is_right_child() const noexcept {
     const auto* node = this;
     return !node->is_root() && node->parent->right == node;
   }
 
-  const splay_tree_node<Value>* find_root() const {
+  const splay_tree_node<Value>* find_root() const noexcept {
     const auto* node = this;
     if (node == nullptr) {
       return nullptr;
@@ -53,7 +54,7 @@ struct splay_tree_node {
     return node;
   }
 
-  const splay_tree_node<Value>* rightmost_node() const {
+  const splay_tree_node<Value>* rightmost_node() const noexcept {
     const auto* node = this;
     while (node->right != nullptr) {
       node = node->right;
@@ -61,12 +62,12 @@ struct splay_tree_node {
     return node;
   }
 
-  splay_tree_node<Value>* rightmost_node() {
+  splay_tree_node<Value>* rightmost_node() noexcept {
     const auto* const node = this;
     return const_cast<splay_tree_node<Value>*>(node->rightmost_node());
   }
 
-  const splay_tree_node<Value>* leftmost_node() const {
+  const splay_tree_node<Value>* leftmost_node() const noexcept {
     const auto* node = this;
     while (node->left != nullptr) {
       node = node->left;
@@ -74,12 +75,13 @@ struct splay_tree_node {
     return node;
   }
 
-  splay_tree_node<Value>* leftmost_node() {
+  splay_tree_node<Value>* leftmost_node() noexcept {
     const auto* const node = this;
     return const_cast<splay_tree_node<Value>*>(node->leftmost_node());
   }
 
-  const splay_tree_node<Value>* next_node() const {
+  // find next node with respect to key order
+  const splay_tree_node<Value>* next_node() const noexcept {
     const auto* node = this;
     auto next = static_cast<const splay_tree_node<Value>*>(nullptr);
     if (node->right != nullptr) {
@@ -96,11 +98,12 @@ struct splay_tree_node {
     return next;
   }
 
-  splay_tree_node<Value>* next_node() {
+  splay_tree_node<Value>* next_node() noexcept {
     const auto* const node = this;
     return const_cast<splay_tree_node<Value>*>(node->next_node());
   }
 
+  // find previous node with respect to key order
   const splay_tree_node<Value>* prev_node() const {
     const auto* node = this;
     auto prev = static_cast<const splay_tree_node<Value>*>(nullptr);
@@ -118,13 +121,13 @@ struct splay_tree_node {
     return prev;
   }
 
-  splay_tree_node<Value>* prev_node() {
+  splay_tree_node<Value>* prev_node() noexcept {
     const auto* const node = this;
     return const_cast<splay_tree_node<Value>*>(node->prev_node());
   }
 
   Value value;
-  uint64_t node_count;
+  uint64_t size;
   splay_tree_node<Value>* parent;
   splay_tree_node<Value>* left;
   splay_tree_node<Value>* right;
@@ -132,13 +135,12 @@ struct splay_tree_node {
 
 template <typename Value>
 std::ostream& operator << (std::ostream& out, const splay_tree_node<Value>& node) {
-  out << "[" << node.value << "]"; // << ", " << node.node_count << "]";
+  out << "[v=" << node.value << ", s=" << node.size << "]";
   return out;
 }
 
-
 template <typename Value>
-void destroy_node(splay_tree_node<Value>* node) {
+void destroy_node(splay_tree_node<Value>* node) noexcept {
   assert(node != nullptr);
   delete node;
 }
@@ -159,9 +161,8 @@ void print_subtree(std::ostream& out, const splay_tree_node<Value>* root) {
   out << ")";
 }
 
-// destroy subtree under the node `root`
 template <typename Value>
-void destroy_substree(splay_tree_node<Value>* root) {
+void destroy_substree(splay_tree_node<Value>* root) noexcept {
   if (root == nullptr) {
     return;
   }
@@ -174,60 +175,71 @@ void destroy_substree(splay_tree_node<Value>* root) {
 }
 
 template <typename Value>
-void update_node_count(splay_tree_node<Value>* node) {
+void update_size(splay_tree_node<Value>* node) noexcept {
   if (node != nullptr) {
-    node->node_count = uint64_t{1};
-    node->node_count += (node->left != nullptr ? node->left->node_count : uint64_t{0});
-    node->node_count += (node->right != nullptr ? node->right->node_count : uint64_t{0});
+    node->size = uint64_t{1};
+    node->size += (node->left != nullptr ? node->left->size : uint64_t{0});
+    node->size += (node->right != nullptr ? node->right->size : uint64_t{0});
   }
 }
 
-// insert new node `new_node` to subtree at root `root`, without rebalancing
+// insert value to subtree at root `root`, no rebalancing
 template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
-void insert_node(
+splay_tree_node<Value>* insert_node(
     splay_tree_node<Value>* root,
-    splay_tree_node<Value>* new_node,
+    const Value& value,
     const KeyExtractor& extractor,
     const KeyComparator& comparator) {
   assert(root != nullptr);
-  assert(new_node != nullptr);
-  assert(new_node->node_count == 1);
-  assert(new_node->left == nullptr);
-  assert(new_node->right == nullptr);
-  if (comparator(extractor(new_node->value), extractor(root->value))) {
-    if (root->left == nullptr) {
-      root->left = new_node;
-      new_node->parent = root;
+  auto node = static_cast<splay_tree_node<Value>*>(nullptr);
+  while (root != nullptr) {
+    node = root;
+    if (comparator(extractor(value), extractor(root->value))) {
+      if (root->left == nullptr) {
+        auto new_node = create_node(value);
+        root->left = new_node;
+        new_node->parent = root;
+        node = new_node;
+        break;
+      } else {
+        root = root->left;
+      }
+    } else if (comparator(extractor(root->value), extractor(value))) {
+      if (root->right == nullptr) {
+        auto new_node = create_node(value);
+        root->right = new_node;
+        new_node->parent = root;
+        node = new_node;
+        break;
+      } else {
+        root = root->right;
+      }
     } else {
-      insert_node<Key, Value, KeyExtractor, KeyComparator>(
-        root->left, new_node, extractor, comparator);
+      node = nullptr;
+      break;
     }
-    ++root->node_count;
-  } else if (comparator(extractor(root->value), extractor(new_node->value))) {
-    if (root->right == nullptr) {
-      root->right = new_node;
-      new_node->parent = root;
-    } else {
-      insert_node<Key, Value, KeyExtractor, KeyComparator>(
-        root->right, new_node, extractor, comparator);
-    }
-    ++root->node_count;
-  } else {
-    // key already in the tree, do nothing
-    ;
   }
+  if (node != nullptr) {
+    auto parent = node->parent;
+    while (parent != nullptr) {
+      parent->size += uint64_t{1};
+      parent = parent->parent;
+    }
+  }
+  return node;
 }
 
 template <typename Value>
-void left_rotate_node(splay_tree_node<Value>* node) {
+void left_rotate_node(splay_tree_node<Value>* node) noexcept {
   /* u is node, a is parent, B is branch, p is granny
-          p             p
-          |             |
-          a             u
-         / \           / \
-        u   C    =>   A   a
-       / \               / \
-      A  B              B  C
+  *
+  *      p             p
+  *      |             |
+  *      a             u
+  *     / \           / \
+  *    u   C    =>   A   a
+  *   / \               / \
+  *  A  B              B  C
   */
 
   assert(node != nullptr);
@@ -251,21 +263,21 @@ void left_rotate_node(splay_tree_node<Value>* node) {
   if (branch != nullptr) {
     branch->parent = parent;
   }
-  update_node_count(parent);
-  update_node_count(node);
+  update_size(parent);
+  update_size(node);
 }
 
 template <typename Value>
-void right_rotate_node(splay_tree_node<Value>* node) {
+void right_rotate_node(splay_tree_node<Value>* node) noexcept {
   /* u is node, a is parent, B is branch, p is granny
-
-        p             p
-        |             |
-        a             u
-       / \           / \
-      C   u    =>   a  A
-         / \       / \
-        B  A      C  B
+  *
+  *      p             p
+  *      |             |
+  *      a             u
+  *     / \           / \
+  *    C   u    =>   a  A
+  *       / \       / \
+  *      B  A      C  B
   */
 
   assert(node != nullptr);
@@ -289,12 +301,12 @@ void right_rotate_node(splay_tree_node<Value>* node) {
   if (branch != nullptr) {
     branch->parent = parent;
   }
-  update_node_count(parent);
-  update_node_count(node);
+  update_size(parent);
+  update_size(node);
 }
 
 template <typename Value>
-void rotate_node(splay_tree_node<Value>* node) {
+void rotate_node(splay_tree_node<Value>* node) noexcept {
   if (node->is_left_child()) {
     left_rotate_node(node);
   } else if (node->is_right_child()) {
@@ -306,52 +318,52 @@ void rotate_node(splay_tree_node<Value>* node) {
 
 // splay node `node`
 template <typename Value>
-splay_tree_node<Value>* splay(splay_tree_node<Value>* node) {
+void splay_node(splay_tree_node<Value>* node) noexcept {
   /* ------------------------------------------------------------------------------------
-     zig_zig
-            p                                                                p
-            |                                 p                              |
-            b                                 |                              u
-           / \                                a                             / \
-          a   D    left_rotate_node(a)      /   \    left_rotate_node(u)   A   a
-         / \                              u       b                           / \
-        u   C                            / \     / \                         B   b
-       / \                              A   B   C   D                           / \
-      A   B                                                                    C   D
-     ------------------------------------------------------------------------------------
-     zig_zag
-        p                             p
-        |                             |                                p
-        b                             b                                |
-       / \                           / \                               u
-      D   a    left_rotate_node(u)  D   u   right_rotate_node(u)     /   \
-         / \                           / \                         b       a
-        u   C                         A   a                       / \     / \
-       / \                               / \                     D   A   B   C
-      A   B                             B   C
-     ------------------------------------------------------------------------------------
-     zag_zig
-           p                                  p
-           |                                  |                                p
-           b                                  b                                |
-          / \                                / \                               u
-         a   D    right_rotate_node(u)      u   D    left_rotate_node(u)     /   \
-        / \                                / \                             a       b
-       C   u                              a   B                           / \     / \
-          / \                            / \                             C   A   B   D
-         A   B                          C   A
-     ------------------------------------------------------------------------------------
-     zag_zag
-        p                                                                  p
-        |                                p                                 |
-        b                                |                                 u
-       / \                               a                                / \
-      D   a   right_rotate_node(a)     /   \   right_rotate_node(u)      a   B
-         / \                         b       u                          / \
-        C   u                       / \     / \                        b   A
-           / \                     D   C   A   B                      / \
-          A   B                                                      D   C
-     ------------------------------------------------------------------------------------
+  * zig_zig
+  *        p                                                                p
+  *        |                                 p                              |
+  *        b                                 |                              u
+  *       / \                                a                             / \
+  *      a   D    left_rotate_node(a)      /   \    left_rotate_node(u)   A   a
+  *     / \                              u       b                           / \
+  *    u   C                            / \     / \                         B   b
+  *   / \                              A   B   C   D                           / \
+  *  A   B                                                                    C   D
+  * ------------------------------------------------------------------------------------
+  * zig_zag
+  *    p                             p
+  *    |                             |                                p
+  *    b                             b                                |
+  *   / \                           / \                               u
+  *  D   a    left_rotate_node(u)  D   u   right_rotate_node(u)     /   \
+  *     / \                           / \                         b       a
+  *    u   C                         A   a                       / \     / \
+  *   / \                               / \                     D   A   B   C
+  *  A   B                             B   C
+  * ------------------------------------------------------------------------------------
+  * zag_zig
+  *       p                                  p
+  *       |                                  |                                p
+  *       b                                  b                                |
+  *      / \                                / \                               u
+  *     a   D    right_rotate_node(u)      u   D    left_rotate_node(u)     /   \
+  *    / \                                / \                             a       b
+  *   C   u                              a   B                           / \     / \
+  *      / \                            / \                             C   A   B   D
+  *     A   B                          C   A
+  * ------------------------------------------------------------------------------------
+  * zag_zag
+  *    p                                                                  p
+  *    |                                p                                 |
+  *    b                                |                                 u
+  *   / \                               a                                / \
+  *  D   a   right_rotate_node(a)     /   \   right_rotate_node(u)      a   B
+  *     / \                         b       u                          / \
+  *    C   u                       / \     / \                        b   A
+  *       / \                     D   C   A   B                      / \
+  *      A   B                                                      D   C
+  * ------------------------------------------------------------------------------------
   */
   assert(node != nullptr);
   while (node->parent != nullptr) {
@@ -369,45 +381,70 @@ splay_tree_node<Value>* splay(splay_tree_node<Value>* node) {
       }
     }
   }
-  return node;
 }
 
 // find node with key `key` in the subtree under node `root`. If such node doesn't exist
 // return the last node during this search
-template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
-const splay_tree_node<Value>* find_candidate(
-    const splay_tree_node<Value>* root,
-    const Key& key,
-    const KeyExtractor& extractor,
-    const KeyComparator& comparator) {
-  assert(root != nullptr);
-  auto node = static_cast<const splay_tree_node<Value>*>(nullptr);
-  if (comparator(key, extractor(root->value))) {
-    if (root->left == nullptr) {
-      node = root;
-    } else {
-      node = find_candidate(root->left, key, extractor, comparator);
-    }
-  } else if (comparator(extractor(root->value), key)) {
-    if (root->right == nullptr) {
-      node = root;
-    } else {
-      node = find_candidate(root->right, key, extractor, comparator);
-    }
-  } else {
-    node = root;
-  }
-  return node;
-}
-
 template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
 splay_tree_node<Value>* find_candidate(
     splay_tree_node<Value>* root,
     const Key& key,
     const KeyExtractor& extractor,
     const KeyComparator& comparator) {
-  const auto* const node = root;
-  return const_cast<splay_tree_node<Value>*>(find_candidate(node, key, extractor, comparator));
+  auto node = static_cast<splay_tree_node<Value>*>(nullptr);
+  if (root != nullptr) {
+    node = root->parent;
+    while (root != nullptr) {
+      node = root;
+      if (comparator(key, extractor(root->value))) {
+        root = root->left;
+      } else if (comparator(extractor(root->value), key)) {
+        root = root->right;
+      } else {
+        node = root;
+        break;
+      }
+    }
+  }
+  return node;
+}
+
+// return the first node whose key is not less than key
+template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
+splay_tree_node<Value>* lower_bound(
+    splay_tree_node<Value>* root,
+    const Key& key,
+    const KeyExtractor& extractor,
+    const KeyComparator& comparator) {
+  auto node = static_cast<splay_tree_node<Value>*>(nullptr);
+  while (root != nullptr) {
+    if (!comparator(extractor(root->value), key)) {
+      node = root;
+      root = root->left;
+    } else {
+      root = root->right;
+    }
+  }
+  return node;
+}
+
+// return the first node whose key is greater than key
+template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
+splay_tree_node<Value>* upper_bound(
+    splay_tree_node<Value>* root,
+    const Key& key,
+    const KeyExtractor& extractor,
+    const KeyComparator& comparator) {
+  auto node = static_cast<splay_tree_node<Value>*>(nullptr);
+  while (root != nullptr) {
+    if (comparator(key, extractor(root->value))) {
+      node = root;
+      root = root->left;
+    } else {
+      root = root->right;
+    }
+  }
+  return node;
 }
 
 template <typename Value>
@@ -417,7 +454,7 @@ splay_tree_node<Value>* copy_subtree(const splay_tree_node<Value>* root) {
   }
   auto node = create_node(root->value);
   assert(node != nullptr);
-  node->node_count = root->node_count;
+  node->size = root->size;
   node->left = copy_subtree(root->left);
   if (node->left != nullptr) {
     node->left->parent = node;
@@ -431,8 +468,10 @@ splay_tree_node<Value>* copy_subtree(const splay_tree_node<Value>* root) {
 
 // merge two subtrees under node `lhs` and `rhs`
 // all keys in subtree of `lhs` must be strictly less then any key in subtree of `rhs`
+// after merge lhs owns all nodes of rhs and rhs is empty
 template <typename Value>
-splay_tree_node<Value>* merge_subtrees(splay_tree_node<Value>* lhs, splay_tree_node<Value>* rhs) {
+splay_tree_node<Value>* merge_subtrees(
+    splay_tree_node<Value>* lhs, splay_tree_node<Value>* rhs) noexcept {
   assert(lhs == nullptr || lhs->parent == nullptr);
   assert(rhs == nullptr || rhs->parent == nullptr);
   if (lhs == nullptr) {
@@ -441,55 +480,89 @@ splay_tree_node<Value>* merge_subtrees(splay_tree_node<Value>* lhs, splay_tree_n
   if (rhs == nullptr) {
     return lhs;
   }
-  auto max_lhs = splay(lhs->rightmost_node());
+  auto max_lhs = lhs->rightmost_node();
+  splay_node(max_lhs);
   assert(max_lhs->right == nullptr);
   max_lhs->right = rhs;
   rhs->parent = max_lhs;
-  max_lhs->node_count += rhs->node_count;
+  max_lhs->size += rhs->size;
   return max_lhs;
+}
+
+// split root node onto two trees `left` and `right` such that
+// any key in `left` is less than `node->value`
+// any key in `right` is greater or equal to `node->value`
+template <typename Value, typename KeyExtractor, typename KeyComparator>
+std::pair<splay_tree_node<Value>*, splay_tree_node<Value>*> split_root(
+    splay_tree_node<Value>* root,
+    const KeyExtractor& extractor,
+    const KeyComparator& comparator) noexcept {
+  assert(root != nullptr);
+  assert(root->parent == nullptr);
+  auto left = static_cast<splay_tree_node<Value>*>(nullptr);
+  auto right = static_cast<splay_tree_node<Value>*>(nullptr);
+  left = root->left;
+  right = root;
+  // forget relatives
+  right->left = nullptr;
+  right->parent = nullptr;
+  if (left != nullptr) {
+    left->parent = nullptr;
+    right->size -= left->size;
+  }
+  return std::make_pair(left, right);
 }
 
 // split tree under node `root` onto two trees `left` and `right` such that
 // any key in `left` is less than `key`
 // any key in `right` is greater or equal to `key`
 template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
-std::pair<splay_tree_node<Value>*, splay_tree_node<Value>*> split_subtree(
+std::pair<splay_tree_node<Value>*, splay_tree_node<Value>*> split_lower_impl(
     splay_tree_node<Value>* root,
     const Key& key,
     const KeyExtractor& extractor,
-    const KeyComparator& comparator) {
-  assert(root != nullptr);
-  assert(root->parent == nullptr);
-  auto left = static_cast<splay_tree_node<Value>*>(nullptr);
-  auto right = static_cast<splay_tree_node<Value>*>(nullptr);
+    const KeyComparator& comparator) noexcept {
+  auto split = std::pair<splay_tree_node<Value>*, splay_tree_node<Value>*>{nullptr, nullptr};
   if (root != nullptr) {
-    root = splay(find_candidate(root, key, extractor, comparator));
-    if (comparator(extractor(root->value), key)) {
-      left = root;
-      right = root->right;
-      // forget relatives
-      left->right = nullptr;
-      left->parent = nullptr;
-      if (right != nullptr) {
-        right->parent = nullptr;
-        left->node_count -= right->node_count;
-      }
+    auto bound = lower_bound(root, key, extractor, comparator);
+    if (bound != nullptr) {
+      splay_node(bound);
+      split = split_root(bound, extractor, comparator);
     } else {
-      left = root->left;
-      right = root;
-      // forget relatives
-      right->left = nullptr;
-      right->parent = nullptr;
-      if (left != nullptr) {
-        left->parent = nullptr;
-        right->node_count -= left->node_count;
-      }
+      split = std::make_pair(root, nullptr);
     }
   }
-  return std::make_pair(left, right);
+  return split;
 }
 
+// split tree under node `root` onto two trees `left` and `right` such that
+// any key in `left` is less than or equal to `key`
+// any key in `right` is greater than`bound->value`
 template <typename Key, typename Value, typename KeyExtractor, typename KeyComparator>
+std::pair<splay_tree_node<Value>*, splay_tree_node<Value>*> split_upper_impl(
+    splay_tree_node<Value>* root,
+    const Key& key,
+    const KeyExtractor& extractor,
+    const KeyComparator& comparator) noexcept {
+  auto split = std::pair<splay_tree_node<Value>*, splay_tree_node<Value>*>{};
+  if (root != nullptr) {
+    auto bound = upper_bound(root, key, extractor, comparator);
+    if (bound != nullptr) {
+      splay_node(bound);
+      split = split_root(bound, extractor, comparator);
+    } else {
+      split = std::make_pair(root, nullptr);
+    }
+  }
+  return split;
+}
+
+// Splay tree (no duplicate keys)
+template <
+  typename Key,
+  typename Value,
+  typename KeyExtractor,
+  typename KeyComparator>
 struct splay_tree {
   explicit splay_tree(const KeyComparator& comparator = KeyComparator{})
     : root{nullptr}
@@ -509,12 +582,12 @@ struct splay_tree {
     }
   }
 
-  splay_tree(const splay_tree& other)
+  splay_tree(const splay_tree<Key, Value, KeyExtractor, KeyComparator>& other)
     : splay_tree{} {
     this->root = copy_subtree(other.root);
   }
 
-  splay_tree(splay_tree<Key, Value, KeyExtractor, KeyComparator>&& other)
+  splay_tree(splay_tree<Key, Value, KeyExtractor, KeyComparator>&& other) noexcept
     : splay_tree{} {
     this->swap(other);
   }
@@ -529,55 +602,66 @@ struct splay_tree {
   }
 
   splay_tree<Key, Value, KeyExtractor, KeyComparator>& operator = (
-     splay_tree<Key, Value, KeyExtractor, KeyComparator>&& other) {
+     splay_tree<Key, Value, KeyExtractor, KeyComparator>&& other) noexcept {
     this->swap(other);
     return *this;
   }
 
   ~splay_tree() {
-    auto* const tree = this;
-    destroy_substree(tree->root);
+    clear();
   }
 
-  const splay_tree_node<Value>* find(const Key& key) const {
+  size_t size() const noexcept {
     auto* const tree = this;
-    if (tree->root == nullptr) {
-      return nullptr;
-    }
+    return tree->root != nullptr ? tree->root->size : size_t{0};
+  }
+
+  bool empty() const noexcept {
+    auto* const tree = this;
+    return tree->root != nullptr;
+  }
+
+  // find node with key equal to `key`, if doesn't exist return null
+  // rebalances the tree
+  splay_tree_node<Value>* find(const Key& key) {
+    auto* const tree = this;
     auto node = find_candidate(tree->root, key, tree->extractor, tree->comparator);
-    const auto strictly_less = tree->comparator(tree->extractor(node->value), key);
-    const auto strictly_greater = tree->comparator(key, tree->extractor(node->value));
-    if (strictly_less || strictly_greater) {
-      return nullptr;
+    if (node != nullptr) {
+      splay_node(node);
+      tree->root = node;
+      const auto strictly_less = tree->comparator(tree->extractor(node->value), key);
+      const auto strictly_greater = tree->comparator(key, tree->extractor(node->value));
+      if (strictly_less || strictly_greater) {
+        return nullptr;
+      }
     }
     return node;
-  }
-
-  splay_tree_node<Value>* find(const Key& key) {
-    const auto* const tree = this;
-    return const_cast<splay_tree_node<Value>*>(tree->find(key));
   }
 
   // insert value `value` into the tree `tree` and rebalance the tree
   splay_tree_node<Value>* insert(const Value& value) {
     auto* const tree = this;
-    auto new_node = create_node(value);
-    assert(new_node != nullptr);
+    auto node = static_cast<splay_tree_node<Value>*>(nullptr);
     if (tree->root == nullptr) {
+      auto new_node = create_node(value);
       tree->root = new_node;
       new_node->parent = nullptr;
+      node = new_node;
     } else {
-      insert_node<Key, Value, KeyExtractor, KeyComparator>(
-        tree->root, new_node, tree->extractor, tree->comparator);
-      tree->root = splay(new_node);
+      node = insert_node<Key, Value, KeyExtractor, KeyComparator>(
+        tree->root, value, tree->extractor, tree->comparator);
+      if (node != nullptr) {
+        splay_node(node);
+        tree->root = node;
+      }
     }
-    return new_node;
+    return node;
   }
 
   // erase node `node` from tree `tree`
-  splay_tree_node<Value>* erase(splay_tree_node<Value>* node) {
+  splay_tree_node<Value>* erase(splay_tree_node<Value>* node) noexcept {
     auto* const tree = this;
-    splay(node);
+    splay_node(node);
     const auto left = node->left;
     if (node->left != nullptr) {
       node->left->parent = nullptr;
@@ -591,31 +675,58 @@ struct splay_tree {
     return right;
   }
 
-  std::pair<
-    splay_tree<Key, Value, KeyExtractor, KeyComparator>,
-    splay_tree<Key, Value, KeyExtractor, KeyComparator>>
-  split(const Value& value) {
+  // split `this` tree and put resutls into `left` tree and the `right` tree
+  // all keys in `left` are less than `key`
+  // all keys in `right` are greater or equal to `key`
+  void split_lower(
+      const Key& key,
+      splay_tree<Key, Value, KeyExtractor, KeyComparator>& left_tree,
+      splay_tree<Key, Value, KeyExtractor, KeyComparator>& right_tree) noexcept {
     auto* const tree = this;
-    auto trees = split_subtree(
-      tree->root, tree->extractor(value), tree->extractor, tree->comparator);
+    auto trees = split_lower_impl(
+      tree->root, key, tree->extractor, tree->comparator);
     tree->root = nullptr;
-    auto left_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    left_tree.clear();
     left_tree.root = trees.first;
-    auto right_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    right_tree.clear();
     right_tree.root = trees.second;
-
-    return std::make_pair(left_tree, right_tree);
   }
 
-  void merge(splay_tree<Key, Value, KeyExtractor, KeyComparator>& rhs) {
+  // split `this` tree and put resutls into `left` tree and the `right` tree
+  // all keys in `left` are less or equal to `key`
+  // all keys in `right` are greater than `key`
+  void split_upper(
+      const Key& key,
+      splay_tree<Key, Value, KeyExtractor, KeyComparator>& left_tree,
+      splay_tree<Key, Value, KeyExtractor, KeyComparator>& right_tree) noexcept {
+    auto* const tree = this;
+    auto trees = split_upper_impl(
+      tree->root, key, tree->extractor, tree->comparator);
+    tree->root = nullptr;
+    left_tree.clear();
+    left_tree.root = trees.first;
+    right_tree.clear();
+    right_tree.root = trees.second;
+  }
+
+  // merge nodes from `rhs` tree into `this` tree.
+  // all keys in `rhs` tree must be greater than keys in `this` tree
+  void merge(splay_tree<Key, Value, KeyExtractor, KeyComparator>& rhs) noexcept {
     auto* const lhs = this;
     lhs->root = merge_subtrees(lhs->root, rhs.root);
     rhs.root = nullptr;
   }
 
-  void swap(splay_tree<Key, Value, KeyExtractor, KeyComparator>& other) {
+  // swap contenrts fof two trees
+  void swap(splay_tree<Key, Value, KeyExtractor, KeyComparator>& other) noexcept {
     auto* const tree = this;
     std::swap(tree->root, other.root);
+  }
+
+  // remove all nodes from the tree
+  void clear() noexcept {
+    auto* const tree = this;
+    destroy_substree(tree->root);
   }
 
   splay_tree_node<Value>* root;

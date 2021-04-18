@@ -24,9 +24,9 @@ node_count_check_result<Value> check_node_count(const splay_tree_node<Value>* no
   if (node == nullptr) {
     return node_count_check_result<Value>{true, nullptr};
   }
-  const auto left_node_count = node->left != nullptr ? node->left->node_count : uint64_t{0};
-  const auto right_node_count = node->right != nullptr ? node->right->node_count : uint64_t{0};
-  if (node->node_count != left_node_count + right_node_count + 1) {
+  const auto left_node_count = node->left != nullptr ? node->left->size : uint64_t{0};
+  const auto right_node_count = node->right != nullptr ? node->right->size : uint64_t{0};
+  if (node->size != left_node_count + right_node_count + 1) {
     return node_count_check_result<Value>{false, node};
   }
   const auto left_result = check_node_count(node->left);
@@ -165,16 +165,20 @@ void check_subtree(const splay_tree_node<Value>* node) {
 
 class Int64 {
  public:
+  explicit Int64(int64_t value) noexcept
+    : value{value} {
+  }
+
+  bool operator == (const Int64& rhs) const {
+    return this->value == rhs.value;
+  }
+
+  bool operator != (const Int64& rhs) const {
+    return this->value != rhs.value;
+  }
+
   int64_t value;
 };
-
-bool operator == (const Int64& lhs, const Int64& rhs) {
-  return lhs.value == rhs.value;
-}
-
-bool operator != (const Int64& lhs, const Int64& rhs) {
-  return lhs.value != rhs.value;
-}
 
 std::ostream& operator << (std::ostream& out, const Int64& value) {
   out << value;
@@ -183,24 +187,23 @@ std::ostream& operator << (std::ostream& out, const Int64& value) {
 
 class Int32 {
  public:
-  Int32(int32_t value)
+  explicit Int32(int32_t value) noexcept
     : value{value} {
   }
 
- public:
   int32_t value;
 };
 
 class Int32Extractor {
  public:
-  Int32 operator ()(const Int64& value) const {
+  Int32 operator ()(const Int64& value) const noexcept {
     return Int32{static_cast<int32_t>(value.value)};
   }
 };
 
 class Int32Comparator {
  public:
-  bool operator () (const Int32& lhs, const Int32& rhs) const {
+  bool operator () (const Int32& lhs, const Int32& rhs) const noexcept {
     return lhs.value < rhs.value;
   }
 };
@@ -221,7 +224,7 @@ void test_insert_into_empty_tree() {
   auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{{Value{1}}};
   assert(tree.root != nullptr);
   assert(tree.root->value == Value{1});
-  assert(tree.root->node_count == 1);
+  assert(tree.root->size == 1);
 }
 
 void test_insert_exact_structure() {
@@ -235,26 +238,26 @@ void test_insert_exact_structure() {
   // ((()[1, 1]())[2, 2]())[3, 4](()[4, 1]()))
   assert(tree.root != nullptr);
   assert(tree.root->value == Value{3});
-  assert(tree.root->node_count == 4);
+  assert(tree.root->size == 4);
   assert(tree.root->parent == nullptr);
   assert(tree.root->right != nullptr);
   assert(tree.root->right != nullptr);
 
   assert(tree.root->right->parent == tree.root);
   assert(tree.root->right->value == Value{4});
-  assert(tree.root->right->node_count == 1);
+  assert(tree.root->right->size == 1);
   assert(tree.root->right->left == nullptr);
   assert(tree.root->right->right == nullptr);
 
   assert(tree.root->left->parent == tree.root);
   assert(tree.root->left->value == Value{2});
-  assert(tree.root->left->node_count == 2);
+  assert(tree.root->left->size == 2);
   assert(tree.root->left->left != nullptr);
   assert(tree.root->left->right == nullptr);
 
   assert(tree.root->left->left->parent = tree.root->left);
   assert(tree.root->left->left->value == Value{1});
-  assert(tree.root->left->left->node_count == 1);
+  assert(tree.root->left->left->size == 1);
   assert(tree.root->left->left->left == nullptr);
   assert(tree.root->left->left->right == nullptr);
 }
@@ -267,7 +270,7 @@ void test_insert_batch() {
   auto values = {Value{1}, Value{2}, Value{-12}, Value{15}, Value{-2}, Value{-7}, Value{4}};
   auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{values};
   assert(tree.root != nullptr);
-  assert(tree.root->node_count == values.size());
+  assert(tree.root->size == values.size());
 }
 
 void test_next_node() {
@@ -281,7 +284,7 @@ void test_next_node() {
     tree.insert(Value{value});
   }
   assert(tree.root != nullptr);
-  assert(tree.root->node_count == values.size());
+  assert(tree.root->size == values.size());
   auto it = tree.root->leftmost_node();
   std::sort(std::begin(values), std::end(values));
   auto current = std::begin(values);
@@ -304,7 +307,7 @@ void test_prev_node() {
     tree.insert(Value{value});
   }
   assert(tree.root != nullptr);
-  assert(tree.root->node_count == values.size());
+  assert(tree.root->size == values.size());
   auto it = tree.root->rightmost_node();
   std::sort(std::begin(values), std::end(values));
   auto current = std::rbegin(values);
@@ -347,10 +350,10 @@ void test_find_candidate_neighbour_values() {
     tree.insert(Value{value});
   }
   std::sort(std::begin(values), std::end(values));
-  auto missing_values = std::vector<int64_t>{{5, 15, 25, 35, 45, 55, 65}};
+  auto missing_values = std::vector<int32_t>{{5, 15, 25, 35, 45, 55, 65}};
   for (const auto& value : missing_values) {
     auto node = find_candidate<Key, Value, KeyExtractor, KeyComparator>(
-      tree.root, value, tree.extractor, tree.comparator);
+      tree.root, Key{value}, tree.extractor, tree.comparator);
     assert(node != nullptr);
     assert(node->value != Value{value});
     auto top = std::upper_bound(
@@ -371,19 +374,19 @@ void test_find_batch() {
   using Key = Int32;
   using KeyExtractor = Int32Extractor;
   using KeyComparator = Int32Comparator;
-  const auto present_values = std::vector<int64_t>{{1, 2, 3, -1, 5, -2}};
-  const auto missing_values = std::vector<int64_t>{{100, 200, 300, -100, 500, -200}};
+  const auto present_values = std::vector<int32_t>{{1, 2, 3, -1, 5, -2}};
+  const auto missing_values = std::vector<int32_t>{{100, 200, 300, -100, 500, -200}};
   auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
   for (const auto& value : present_values) {
     tree.insert(Value{value});
   }
   for (const auto& value : present_values) {
-    auto node = tree.find(value);
+    auto node = tree.find(Key{value});
     assert(node != nullptr);
     assert(node->value == Value{value});
   }
   for (const auto& value : missing_values) {
-    auto node = tree.find(value);
+    auto node = tree.find(Key{value});
     assert(node == nullptr);
   }
 }
@@ -408,7 +411,7 @@ void test_merge_with_empty_tree_left() {
   auto other_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
   tree.merge(other_tree);
   assert(tree.root != nullptr);
-  assert(tree.root->node_count == 3);
+  assert(tree.root->size == 3);
   assert(tree.root->value == Value{3});
   assert(tree.root->right == nullptr);
   assert(tree.root->left != nullptr);
@@ -428,7 +431,7 @@ void test_merge_with_empty_tree_right() {
     {Value{1}, Value{2}, Value{3}}};
   tree.merge(other_tree);
   assert(tree.root != nullptr);
-  assert(tree.root->node_count == 3);
+  assert(tree.root->size == 3);
   assert(tree.root->value == Value{3});
   assert(tree.root->right == nullptr);
   assert(tree.root->left != nullptr);
@@ -458,40 +461,40 @@ void test_merge_simple() {
   }
 }
 
-void test_split_single_node_tree() {
+void test_split_lower_single_node_tree() {
   using Value = Int64;
   using Key = Int32;
   using KeyExtractor = Int32Extractor;
   using KeyComparator = Int32Comparator;
   {
     auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{{Value{1}}};
-    auto trees = tree.split(Value{0});
-    const auto& left_tree = trees.first;
-    const auto& right_tree = trees.second;
+    auto left_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    auto right_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    tree.split_lower(Key{0}, left_tree, right_tree);
     assert(left_tree.root == nullptr);
     assert(right_tree.root != nullptr);
     assert(right_tree.root->value == Value{1});
-    assert(right_tree.root->node_count == 1);
+    assert(right_tree.root->size == 1);
   }
   {
     auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{{Value{1}}};
-    auto trees = tree.split(Value{1});
-    const auto& left_tree = trees.first;
-    const auto& right_tree = trees.second;
+    auto left_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    auto right_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    tree.split_lower(Key{1}, left_tree, right_tree);
     assert(left_tree.root == nullptr);
     assert(right_tree.root != nullptr);
     assert(right_tree.root->value == Value{1});
-    assert(right_tree.root->node_count == 1);
+    assert(right_tree.root->size == 1);
   }
   {
     auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{{Value{1}}};
-    auto trees = tree.split(Value{2});
-    const auto& left_tree = trees.first;
-    const auto& right_tree = trees.second;
+    auto left_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    auto right_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+    tree.split_lower(Key{2}, left_tree, right_tree);
     assert(right_tree.root == nullptr);
     assert(left_tree.root != nullptr);
     assert(left_tree.root->value == Value{1});
-    assert(left_tree.root->node_count == 1);
+    assert(left_tree.root->size == 1);
   }
 }
 
@@ -503,10 +506,10 @@ void test_split_simple() {
   auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{
     {Value{1}, Value{4}, Value{3}, Value{2}, Value{7}, Value{0}}};
   check_subtree<Key, Value, KeyExtractor, KeyComparator>(tree.root);
-  auto trees = tree.split(Value{3});
+  auto left_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+  auto right_tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
+  tree.split_lower(Key{3}, left_tree, right_tree);
   check_subtree<Key, Value, KeyExtractor, KeyComparator>(tree.root);
-  const auto& left_tree = trees.first;
-  const auto& right_tree = trees.second;
 
   auto left_it = left_tree.root->leftmost_node();
   auto left_answers = std::vector<int64_t>{{0, 1, 2}};
@@ -546,7 +549,7 @@ void test_erase_simple() {
     {Value{1}, Value{2}, Value{3}}};
   tree.erase(tree.root);
   assert(tree.root != nullptr);
-  assert(tree.root->node_count == 2);
+  assert(tree.root->size == 2);
   assert(tree.root->value == Value{2});
   assert(tree.root->left != nullptr);
   assert(tree.root->left->value == Value{1});
@@ -557,18 +560,18 @@ void test_erase_batch() {
   using Key = Int32;
   using KeyExtractor = Int32Extractor;
   using KeyComparator = Int32Comparator;
-  const auto values = std::vector<int64_t>{{1, 2, -12, 15, -2, -7, 4}};
+  const auto values = std::vector<int32_t>{{1, 2, -12, 15, -2, -7, 4}};
   auto tree = splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
   for (const auto& value : values) {
     tree.insert(Value{value});
   }
   for (const auto& value : values) {
-    auto node = tree.find(value);
+    auto node = tree.find(Key{value});
     assert(node != nullptr);
     assert(node->value == Value{value});
     tree.erase(node);
     if (tree.root != nullptr) {
-      node = tree.find(value);
+      node = tree.find(Key{value});
       assert(node == nullptr);
     }
   }
@@ -595,7 +598,7 @@ int main() {
   test_merge_with_empty_tree_left();
   test_merge_with_empty_tree_right();
   test_merge_simple();
-  test_split_single_node_tree();
+  test_split_lower_single_node_tree();
   test_split_simple();
   test_erase_root();
   test_erase_simple();

@@ -17,8 +17,8 @@ void run() {
   out << "Demonstration of splay tree functionality\n"
       << "Available actions: insert NUMBER, delete NUMBER, find NUMBER, finish.\n";
 
-  using Value = int;
-  using Key = int;
+  using Value = int64_t;
+  using Key = int64_t;
   using KeyExtractor = identity_key_extractor<Key>;
   using KeyComparator = std::less<Key>;
   auto tree = splay::splay_tree<Key, Value, KeyExtractor, KeyComparator>{};
@@ -60,8 +60,7 @@ void run() {
   }
 }
 
-int main()
-{
+int main() {
   run();
   return 0;
 }

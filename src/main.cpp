@@ -30,86 +30,33 @@ class fast_range_counter {
   {}
 
   void add(const T& number) {
-    if (debug) {
-      std::cout << "==========================" << '\n';
-      std::cout << "+ " << number << '\n';
-    }
     tree.insert(number);
-    if (debug) {
-      std::cout << tree << '\n';
-    }
   }
 
   void remove(const T& number) {
-    if (debug) {
-      std::cout << "==========================" << '\n';
-      std::cout << "- " << number << '\n';
-    }
     auto node = tree.find(number);
     if (node != nullptr) {
       tree.erase(node);
     }
-    if (debug) {
-      std::cout << tree << '\n';
-    }
   }
 
   bool contains(const T& number) {
-    if (debug) {
-      std::cout << "==========================" << '\n';
-      std::cout << "? " << number << '\n';
-    }
-
     auto node = tree.find(number);
-
-    if (debug) {
-      std::cout << tree << '\n';
-    }
-
     return (node != nullptr);
   }
 
   size_t count(const T& low, const T& high) {
     assert(low <= high);
-    if (debug) {
-
-      std::cout << "==========================" << '\n';
-      std::cout << "s " << low << ' ' << high << '\n';
-    }
 
     auto low_node = tree.lower_bound(low);
     auto middle_right_tree = tree.split_right(low_node);
     auto& left_tree = tree;
-
-    if (debug) {
-      std::cout << "left_tree = " << left_tree << '\n';
-      std::cout << "middle+rirgt_tree = " << middle_right_tree << '\n';
-    }
-
     auto high_node = middle_right_tree.upper_bound(high);
     auto right_tree = middle_right_tree.split_right(high_node);
     auto& middle_tree = middle_right_tree;
-
-    if (debug) {
-      std::cout << "left_tree = " << left_tree << '\n';
-      std::cout << "middle_tree = " << middle_tree << '\n';
-      std::cout << "right_tree = " << right_tree << '\n';
-    }
-
     const auto total = (!middle_tree.empty() ? middle_tree.size() : size_t{0});
-
-    if (debug) {
-      std::cout << "total = " << total << '\n';
-    }
-
     middle_tree.merge(right_tree);
-
     left_tree.merge(middle_tree);
-
-    if (debug) {
-      std::cout << "tree = " << tree << '\n';
-    }
-
     return total;
   }
 
@@ -119,7 +66,6 @@ class fast_range_counter {
 
  private:
   tree_type tree;
-  const bool debug = false;
 };
 
 void run() {
